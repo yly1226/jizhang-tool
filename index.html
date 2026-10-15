@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#2f6fed" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>买码统计</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#fff; --line:#e6e8ec; --text:#1f2430; --muted:#8a91a0;
+    --blue:#2f6fed; --green:#16a34a; --red:#dc2626; --orange:#ea8a1e;
+    --radius:14px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  body{
+    margin:0 auto; background:var(--bg); color:var(--text); max-width:820px;
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    padding:12px 12px calc(28px + env(safe-area-inset-bottom));
+  }
+  h1{font-size:19px; margin:6px 2px 4px; font-weight:700}
+  h1 small{color:var(--muted); font-weight:400; font-size:12px; margin-left:6px}
+  .hint{font-size:12px; color:var(--muted); margin:0 2px 12px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:12px; margin-bottom:12px}
+  /* 手机上输入框小于 16px 会被 iOS 自动放大页面，所以固定 16px */
+  textarea, input, select{
+    width:100%; padding:11px; font-size:16px; font-family:inherit; line-height:1.5;
+    border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--text);
+  }
+  textarea{resize:vertical}
+  textarea:focus{outline:2px solid rgba(47,111,237,.25); border-color:var(--blue)}
+  .row{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .row button{flex:1; min-width:80px}
+  button{font:inherit; font-weight:600; padding:10px 12px; border-radius:10px; border:1px solid var(--line);
+         background:#fff; color:var(--text); cursor:pointer}
+  button:active{transform:scale(.98)}
+  .btn-primary{background:var(--blue); border-color:var(--blue); color:#fff}
+  .btn-danger{color:var(--red)}
+
+  /* 汇总条 */
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; text-align:center}
+  .stats .k{font-size:11px; color:var(--muted)}
+  .stats .v{font-size:18px; font-weight:700; font-variant-numeric:tabular-nums}
+  .stats .v.big{font-size:22px; color:var(--blue)}
+
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th,td{padding:8px 6px; border-bottom:1px solid var(--line); text-align:right}
+  th{color:var(--muted); font-weight:500; font-size:11px}
+  th:first-child,td:first-child{text-align:left}
+  td.num{font-variant-numeric:tabular-nums}
+  tr.hit{background:#fff8e6}
+  tr.hit td{font-weight:700}
+
+  /* 号码格：号码 / 生肖 / 累计金额 —— 手机上一行排 5 个左右 */
+  .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(62px, 1fr)); gap:7px}
+  .cell{background:#f8fafc; border:1px solid var(--line); border-radius:10px;
+        padding:8px 2px; text-align:center; transition:background .3s}
+  .cell.hit{background:#fff8e6; border-color:#f0c26b}
+  .cell b{display:block; font-size:16px; line-height:1.25; font-variant-numeric:tabular-nums}
+  .cell s{display:block; font-size:11px; line-height:1.25; color:var(--muted); text-decoration:none}
+  .cell i{display:block; font-size:12px; line-height:1.35; font-weight:700; font-style:normal;
+          font-variant-numeric:tabular-nums; color:var(--blue)}
+  .cell.hit i{color:#b45309}
+  .dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; vertical-align:1px}
+  .dot.a{background:#2f6fed}
+  .dot.g{background:#16a34a}
+
+  .empty{color:var(--muted); text-align:center; padding:20px 0; font-size:13px}
+  .note{font-size:11px; color:var(--muted); margin-top:8px}
+  .warn{color:#b45309; font-size:12px; margin-top:6px; min-height:1px}
+  .batch{display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--line); font-size:13px}
+  .batch:last-child{border-bottom:none}
+  .batch .t{color:var(--muted); font-size:11px; width:76px; flex:none}
+  .batch .txt{flex:1; word-break:break-all; color:var(--text)}
+  .batch .amt{font-weight:700; font-variant-numeric:tabular-nums; flex:none}
+  .batch .del{color:var(--muted); border:none; background:none; font-size:17px; padding:0 4px; flex:none; cursor:pointer}
+  details summary{cursor:pointer; color:var(--muted); font-size:13px; padding:2px 0}
+  .navlink{font-size:12px; color:var(--blue); text-decoration:none}
+  .sec-title{font-size:14px; font-weight:700; margin:14px 2px 8px; display:flex; align-items:center; justify-content:space-between}
+</style>
+
+<!-- ===== PWA / 添加到主屏幕：图标与安装信息（内联，保持单文件） ===== -->
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAADeElEQVR42u3dsVEbQRiG4d0dBR6cocBlmCrsckwDdoAbgHLsKqAMApHZQwaRE8YMSLo73e73PDmgkf53/zvwnGtZmS9Xf54Kw/r942Nd0+uphp3kKKqhJzmGavBJDqEafJJDqAaf5BCqwSc5hGb46cnUM1YNPsnboBl+krdBM/wkR9AMP8kRNMNPcgTN8JMcQTP8JEfQDD/JETTDT3IEzfCTHEHzNpGsOf1J3gLN8JMcgUsgXAI5/UndAjYANoDTn9QtYANgAzj9Sd0CNgA2gNOf1C1gA2ADQHQALn9IvQyyAbABQAAgAMhS3QBjA0CojbeA//n1/Wzvr/n6868AyBv8l1/bUwgC4OjB7zkE9wBMOvxLfF8BgADo4ZRe+xYQADYATv/ULSAAbAAQAAgABAA5AdzvHr0LRLrfPdoAuAQCAYAAIDEAN8Ik3gCXUsrm0/aDd4M4/+beJRAugUAAIAAQAAgABADFoxEpHjUoADxqUAB41KB7ADxqUAAgADxqUAAgADxqUAAgABAACAAEAAIAAYAAQAAgABAACAAEAAKAhW08Gn1KZ4s/3jvr9doAIAAQAAgAQh+MdXt9vvfXXFw++MTpO4BDBv/l1wqB7gI4ZvCFQNf3AFMO/xLfFwGAAHo4pW0BAYAAEk9/WwAbAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAMEAAF5cPXf0cr/e0P8cGgNECmPv0mPr7e739nP7xG2DtH47XK4DZ3sg5Pxyvt59Y6+dvu6eeTpXb6/OuPhyvVwCr+aBO+cF4vQIA9wAgABAACABOG8DdzbZ6G0h0d7OtNgAugUAAIAAIDMCNMIk3wDYANoC3AAG4DCLw8scGwAZ4rQwY/fS3AbAB3ioERj39bQBsgPeWAqOd/jYANsC+xcAop/+bG0AEjDz8LoFwCXRsQdDr6f/uDSACRhz+vS6BRMBow7/3PYAIGGn4D7oJFgGjDP/BvwUSASMM/1G/BhUBvQ//0X8HEAE9D/8kfwgTAb0OfymlTDq8/rMNehn8Wf4phG1AT8M/+QawDehl8GcPQAj0cFWx2CWLEFjj5fTi1+xCYE33kSe9aRUDp/7lyep+ayMKw76kZzoIWs2okPuaAAAAAElFTkSuQmCC">
+<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAADeElEQVR42u3dsVEbQRiG4d0dBR6cocBlmCrsckwDdoAbgHLsKqAMApHZQwaRE8YMSLo73e73PDmgkf53/zvwnGtZmS9Xf54Kw/r942Nd0+uphp3kKKqhJzmGavBJDqEafJJDqAaf5BCqwSc5hGb46cnUM1YNPsnboBl+krdBM/wkR9AMP8kRNMNPcgTN8JMcQTP8JEfQDD/JETTDT3IEzfCTHEHzNpGsOf1J3gLN8JMcgUsgXAI5/UndAjYANoDTn9QtYANgAzj9Sd0CNgA2gNOf1C1gA2ADQHQALn9IvQyyAbABQAAgAMhS3QBjA0CojbeA//n1/Wzvr/n6868AyBv8l1/bUwgC4OjB7zkE9wBMOvxLfF8BgADo4ZRe+xYQADYATv/ULSAAbAAQAAgABAA5AdzvHr0LRLrfPdoAuAQCAYAAIDEAN8Ik3gCXUsrm0/aDd4M4/+beJRAugUAAIAAQAAgABADFoxEpHjUoADxqUAB41KB7ADxqUAAgADxqUAAgADxqUAAgABAACAAEAAIAAYAAQAAgABAACAAEAAKAhW08Gn1KZ4s/3jvr9doAIAAQAAgAQh+MdXt9vvfXXFw++MTpO4BDBv/l1wqB7gI4ZvCFQNf3AFMO/xLfFwGAAHo4pW0BAYAAEk9/WwAbAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAMEAAF5cPXf0cr/e0P8cGgNECmPv0mPr7e739nP7xG2DtH47XK4DZ3sg5Pxyvt59Y6+dvu6eeTpXb6/OuPhyvVwCr+aBO+cF4vQIA9wAgABAACABOG8DdzbZ6G0h0d7OtNgAugUAAIAAIDMCNMIk3wDYANoC3AAG4DCLw8scGwAZ4rQwY/fS3AbAB3ioERj39bQBsgPeWAqOd/jYANsC+xcAop/+bG0AEjDz8LoFwCXRsQdDr6f/uDSACRhz+vS6BRMBow7/3PYAIGGn4D7oJFgGjDP/BvwUSASMM/1G/BhUBvQ//0X8HEAE9D/8kfwgTAb0OfymlTDq8/rMNehn8Wf4phG1AT8M/+QawDehl8GcPQAj0cFWx2CWLEFjj5fTi1+xCYE33kSe9aRUDp/7lyep+ayMKw76kZzoIWs2okPuaAAAAAElFTkSuQmCC">
+<link rel="manifest" href='data:application/manifest+json;charset=utf-8,{"name":"买码统计","short_name":"买码统计","start_url":"./parse.html","display":"standalone","orientation":"portrait","background_color":"#f5f6f8","theme_color":"#2f6fed","icons":[{"src":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAADeElEQVR42u3dsVEbQRiG4d0dBR6cocBlmCrsckwDdoAbgHLsKqAMApHZQwaRE8YMSLo73e73PDmgkf53/zvwnGtZmS9Xf54Kw/r942Nd0+uphp3kKKqhJzmGavBJDqEafJJDqAaf5BCqwSc5hGb46cnUM1YNPsnboBl+krdBM/wkR9AMP8kRNMNPcgTN8JMcQTP8JEfQDD/JETTDT3IEzfCTHEHzNpGsOf1J3gLN8JMcgUsgXAI5/UndAjYANoDTn9QtYANgAzj9Sd0CNgA2gNOf1C1gA2ADQHQALn9IvQyyAbABQAAgAMhS3QBjA0CojbeA//n1/Wzvr/n6868AyBv8l1/bUwgC4OjB7zkE9wBMOvxLfF8BgADo4ZRe+xYQADYATv/ULSAAbAAQAAgABAA5AdzvHr0LRLrfPdoAuAQCAYAAIDEAN8Ik3gCXUsrm0/aDd4M4/+beJRAugUAAIAAQAAgABADFoxEpHjUoADxqUAB41KB7ADxqUAAgADxqUAAgADxqUAAgABAACAAEAAIAAYAAQAAgABAACAAEAAKAhW08Gn1KZ4s/3jvr9doAIAAQAAgAQh+MdXt9vvfXXFw++MTpO4BDBv/l1wqB7gI4ZvCFQNf3AFMO/xLfFwGAAHo4pW0BAYAAEk9/WwAbAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAMEAAF5cPXf0cr/e0P8cGgNECmPv0mPr7e739nP7xG2DtH47XK4DZ3sg5Pxyvt59Y6+dvu6eeTpXb6/OuPhyvVwCr+aBO+cF4vQIA9wAgABAACABOG8DdzbZ6G0h0d7OtNgAugUAAIAAIDMCNMIk3wDYANoC3AAG4DCLw8scGwAZ4rQwY/fS3AbAB3ioERj39bQBsgPeWAqOd/jYANsC+xcAop/+bG0AEjDz8LoFwCXRsQdDr6f/uDSACRhz+vS6BRMBow7/3PYAIGGn4D7oJFgGjDP/BvwUSASMM/1G/BhUBvQ//0X8HEAE9D/8kfwgTAb0OfymlTDq8/rMNehn8Wf4phG1AT8M/+QawDehl8GcPQAj0cFWx2CWLEFjj5fTi1+xCYE33kSe9aRUDp/7lyep+ayMKw76kZzoIWs2okPuaAAAAAElFTkSuQmCC","sizes":"192x192","type":"image/png"},{"src":"data:image/png;base64,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","sizes":"512x512","type":"image/png"}]}'>
+<meta name="apple-mobile-web-app-title" content="买码统计">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="application-name" content="买码统计">
+</head>
+<body>
+
+<h1>买码统计 <small>输入一段 → 自动累加</small></h1>
+<p class="hint">
+  粘一句（例：<code>07.19.29…48.20各30澳门特</code>）→ 点「解析并累加」→ **输入框自动清空**，接着输下一条。<br>
+  下面表格永远是**累计**的：1 号先买 30、再买 50 → 这里显示 80。<br>
+  
+</p>
+
+<!-- ========== 存储不可用警告（iOS 本地文件模式会触发） ========== -->
+<div id="storageWarn" class="card" style="display:none; border-color:#f0c26b; background:#fff8e6"></div>
+
+<!-- ========== 输入 ========== -->
+<div class="card">
+  <textarea id="input" rows="3" placeholder="把一句话粘到这里，回车即可累加…&#10;例如：07.19.29.01.13.23.35.45.05.11.17.21.33.43.42.14.26.36.48.20各30澳门特"></textarea>
+  <div class="row">
+    <button class="btn-primary" id="btnAdd" style="flex:2">解析并累加</button>
+    <button id="btnClip">📋 剪贴板</button>
+    <button id="btnSample">例子</button>
+  </div>
+  <div class="row">
+    <button id="btnUndo">↩ 撤销上一次</button>
+    <button class="btn-danger" id="btnClearAll">清空全部</button>
+  </div>
+  <div id="msg" class="warn"></div>
+  <div class="note">数据存在这台设备（localStorage），关掉页面也不丢。</div>
+
+  <details style="margin-top:10px">
+    <summary>备份 / 恢复（换手机、清浏览器数据前一定要做）</summary>
+    <div style="margin-top:8px">
+      <div class="row">
+        <button id="btnBackup">生成备份文本</button>
+        <button id="btnRestore">从文本恢复</button>
+      </div>
+      <textarea id="dataBox" rows="4" placeholder="点「生成备份文本」→ 全选复制，存到微信收藏 / 备忘录；恢复时把文本粘回这里，再点「从文本恢复」"></textarea>
+      <div class="note">备份就是一段文本，包含你所有输入记录。手机浏览器清缓存后数据会丢，靠这个救回来。</div>
+    </div>
+  </details>
+</div>
+
+<!-- ========== 累计 ========== -->
+<div id="stats" class="card"></div>
+
+<div class="card">
+  <div class="sec-title">
+    <span>累计（号码 / 生肖 / 金额）</span>
+    <span style="display:flex; gap:6px">
+      <select id="sortMode" style="width:auto; padding:5px 8px; font-size:12px">
+        <option value="number">按号码</option>
+        <option value="money">按金额</option>
+      </select>
+      <select id="filterKind" style="width:auto; padding:5px 8px; font-size:12px">
+        <option value="all">全部</option>
+        <option value="te">只看特</option>
+        <option value="ping">只看平</option>
+      </select>
+    </span>
+  </div>
+  <div id="cum"></div>
+</div>
+
+<!-- ========== 历史批次 ========== -->
+<div class="card">
+  <details open>
+    <summary>输入记录（共 <b id="batchCount">0</b> 笔，点 × 可删）</summary>
+    <div id="batches" style="margin-top:8px"></div>
+  </details>
+</div>
+
+<!-- ========== 号码↔生肖 对照表（核对用） ========== -->
+<div class="card">
+  <details>
+    <summary>号码 ↔ 生肖 对照表（核对一下对不对）</summary>
+    <div id="zodiacMap" style="margin-top:8px"></div>
+    <div class="note">
+      这份表来自原 App 里硬编码的 CHINESE_ZODIAC，公式：<code>生肖 = 表[(号码-1) % 12]</code>，
+      即 01=鼠、07=马、12=猪、13=鼠… 循环。<br>
+      如果和你那边的对应不一样（六合彩每年会变），告诉我正确的（比如“今年 01 是马”），改一行就能调。
+    </div>
+  </details>
+</div>
+
+<script>
+/* ================= 内联打包：parser/rules.js ================= */
+/* 由 evidence/gen_parser_rules.py 从 yuantongji.apk 反编译结果自动生成 —— 不要手改。
+   来源方法：
+     ZodiacUtils.replaceSpecialStr       → RULES.te
+     ZodiacUtils.replaceSpecialStrBefore → RULES.before
+     ZodiacPingUtils.replacePingSpecialStr → RULES.ping
+   语义：Java 的 String.replace 是「全部替换」，这里对应 JS 的 replaceAll。
+*/
+
+var RULES_before = [
+  ["澳门六合彩", "澳"],
+  ["奥门六合彩", "澳"],
+  ["香港六合彩", "港"],
+];
+// before：源串 190 字符，提取到 4 条替换，其中 1 条是正则（见 RULES_REGEX）
+
+// 下面是 before 里的正则替换（顺序保留，需手写）:
+//   replaceAll(共\d+个号 -> )
+
+var RULES_te = [
+  ["共", "计"],
+  ["总", "计"],
+  ["一共", "计"],
+  ["一起", "起"],
+  ["一肖中特", "特肖"],
+  ["一肖", "肖"],
+  ["各包肖", "特肖各"],
+  ["各包", "特肖各"],
+  ["各肖包", "特肖各"],
+  ["肖包各", "特肖各"],
+  ["包肖", "特肖"],
+  ["包", "特肖"],
+  ["一个号", "各"],
+  ["一个子", "各"],
+  ["一个", "各"],
+  ["一颗", "各"],
+  ["一棵", "各"],
+  ["一粒", "各"],
+  ["两边", ""],
+  ["各码", "各"],
+  ["各立", "各"],
+  ["各粒", "各"],
+  ["各买", "各"],
+  ["各数", "各"],
+  ["各马", "各"],
+  ["每肖", "各肖"],
+  ["各包肖", "特肖各"],
+  ["各肖", "特肖各"],
+  ["各号", "各"],
+  ["各子", "各"],
+  ["每号", "各"],
+  ["每子", "各"],
+  ["每个号", "各"],
+  ["各各", "各"],
+  ["个", "各"],
+  ["名", "各"],
+  ["*", "."],
+  ["，", ","],
+  ["块", "元"],
+  ["快", "元"],
+  ["托", "拖"],
+  ["施", "拖"],
+  ["沲", "拖"],
+  ["陁", "拖"],
+  ["狏", "拖"],
+  ["笼", "龙"],
+  ["蚊", "元"],
+  ["文", "元"],
+  ["克", "元"],
+  ["¥", "元"],
+  ["￥", "元"],
+  ["米一个", "元"],
+  ["米", "元"],
+  ["圆", "元"],
+  ["园", "元"],
+  ["井", "元"],
+  ["斤", "元"],
+  ["闷", "元"],
+  ["元元", "元"],
+  ["免", "兔"],
+  ["候", "猴"],
+  ["侯", "猴"],
+  ["两", "二"],
+  ["伍", "五"],
+  ["兎", "兔"],
+  ["龍", "龙"],
+  ["馬", "马"],
+  ["鷄", "鸡"],
+  ["雞", "鸡"],
+  ["豬", "猪"],
+  ["堠", "猴"],
+  ["候", "猴"],
+  ["㺅", "猴"],
+  ["兰", "蓝"],
+  ["篮", "蓝"],
+  ["緑", "绿"],
+  ["藍", "蓝"],
+  ["紅", "红"],
+  ["坡", "波"],
+  ["ao", "澳"],
+  ["香港稳定六肖", "港"],
+  ["香港六合彩", "港"],
+  ["香港六肖", "港"],
+  ["香港,六肖", "港"],
+  ["香港，六肖", "港"],
+  ["港六肖", "港"],
+  ["澳门稳定六肖", "澳"],
+  ["澳门六合彩", "澳"],
+  ["澳门六肖", "澳"],
+  ["澳门，六肖", "澳"],
+  ["澳门,六肖", "澳"],
+  ["澳六肖", "澳"],
+  ["lo", "10"],
+  ["I0", "10"],
+  ["i0", "10"],
+  ["l0", "10"],
+  ["O", "0"],
+  ["o", "0"],
+  ["家禽", "牛马羊鸡狗猪"],
+  ["家肖", "牛马羊鸡狗猪"],
+  ["野兽", "鼠虎兔龙蛇猴"],
+  ["野肖", "鼠虎兔龙蛇猴"],
+  ["琴", "兔蛇鸡"],
+  ["棋", "鼠牛狗"],
+  ["书", "虎龙马"],
+  ["画", "羊猴猪"],
+  ["男肖", "鼠牛虎龙马猴狗"],
+  ["女肖", "兔蛇羊鸡猪"],
+  ["天肖", "牛兔龙马猴猪"],
+  ["地肖", "鼠虎蛇羊鸡狗"],
+  ["左肖", "鼠牛鸡猴蛇龙"],
+  ["右肖", "鼠牛鸡猴蛇龙"],
+  ["右肖", "虎兔马羊狗猪"],
+  ["前肖", "鼠牛虎兔龙蛇"],
+  ["后肖", "马羊猴鸡狗猪"],
+  ["独字肖", "鼠牛虎兔马羊"],
+  ["合字肖", "龙蛇猴鸡狗猪"],
+  ["阴肖", "鼠龙蛇马狗猪"],
+  ["阳肖", "牛虎兔羊猴鸡"],
+  ["春肖", "虎兔龙"],
+  ["夏肖", "蛇马羊"],
+  ["秋肖", "猴鸡狗"],
+  ["冬肖", "鼠牛猪"],
+  ["红肖", "鼠兔马鸡"],
+  ["蓝肖", "虎蛇猴猪"],
+  ["绿肖", "牛龙羊狗"],
+  ["子", "鼠"],
+  ["丑", "牛"],
+  ["寅", "虎"],
+  ["卯", "兔"],
+  ["辰", "龙"],
+  ["巳", "蛇"],
+  ["午", "马"],
+  ["未", "羊"],
+  ["申", "猴"],
+  ["酉", "鸡"],
+  ["戌", "狗"],
+  ["亥", "猪"],
+];
+// te：源串 3067 字符，提取到 138 条替换，其中 0 条是正则（见 RULES_REGEX）
+
+var RULES_ping = [
+  ["共", "计"],
+  ["总", "计"],
+  ["一共", "计"],
+  ["各组", "各"],
+  ["一组", "各"],
+  ["每组", "各"],
+  ["各串", "各"],
+  ["下", "各"],
+  ["块", "元"],
+  ["快", "元"],
+  ["圆", "元"],
+  ["园", "元"],
+  ["蚊", "元"],
+  ["文", "元"],
+  ["克", "元"],
+  ["米", "元"],
+  ["斤", "元"],
+  ["闷", "元"],
+  ["免", "兔"],
+  ["候", "猴"],
+  ["侯", "猴"],
+  ["兎", "兔"],
+  ["龍", "龙"],
+  ["馬", "马"],
+  ["鷄", "鸡"],
+  ["雞", "鸡"],
+  ["豬", "猪"],
+  ["堠", "猴"],
+  ["候", "猴"],
+  ["㺅", "猴"],
+  ["联", "连"],
+  ["托", "拖"],
+  ["陁", "拖"],
+  ["迤", "拖"],
+  ["沲", "拖"],
+  ["狏", "拖"],
+  ["5不中", "五不中"],
+  ["6不中", "六不中"],
+  ["7不中", "七不中"],
+  ["8不中", "八不中"],
+  ["9不中", "九不中"],
+  ["10不中", "十不中"],
+  ["11不中", "十一不中"],
+  ["12不中", "十二不中"],
+  ["13不中", "十三不中"],
+  ["14不中", "十四不中"],
+  ["15不中", "十五不中"],
+  ["16不中", "十六不中"],
+  ["20不中", "二十不中"],
+  ["3中3", "三中三"],
+  ["2中2", "二中二"],
+  ["3中2", "三中二"],
+  ["2连", "二连肖"],
+  ["3连", "三连肖"],
+  ["4连", "四连肖"],
+  ["5连", "五连肖"],
+  ["2友", "二连肖"],
+  ["3友", "三连肖"],
+  ["4友", "四连肖"],
+  ["5友", "五连肖"],
+  ["二有", "二连肖"],
+  ["三有", "三连肖"],
+  ["四有", "四连肖"],
+  ["五有", "五连肖"],
+  ["二肖", "二连肖"],
+  ["三肖", "三连肖"],
+  ["四肖", "四连肖"],
+  ["五肖", "五连肖"],
+  ["二肖连", "二连肖"],
+  ["三肖连", "三连肖"],
+  ["四肖连", "四连肖"],
+  ["五肖连", "五连肖"],
+  ["两连", "二连"],
+  ["两通", "二连肖"],
+  ["三通", "三连肖"],
+  ["四通", "四连肖"],
+  ["五通", "五连肖"],
+  ["单平", "平码"],
+  ["叫", "平特"],
+  ["_", "-"],
+  ["－", "-"],
+  ["‖", ""],
+  ["(", "["],
+  ["（", "["],
+  [")", "]"],
+  ["）", "]"],
+  ["]]", "]"],
+  ["]", "\n"],
+  ["』", "\n"],
+  ["】", "\n"],
+  ["》", "\n"],
+  ["〗", "\n"],
+  ["[", ""],
+  ["\n\n", "\n"],
+  ["复试", "复式"],
+  ["复制三中三", "复式三中三"],
+  ["复制二中二", "复式二中二"],
+];
+// ping：源串 2564 字符，提取到 107 条替换，其中 10 条是正则（见 RULES_REGEX）
+
+// 下面是 ping 里的正则替换（顺序保留，需手写）:
+//   replaceAll(二连(?!肖|尾) -> 二连肖)
+//   replaceAll(两连(?!肖|尾) -> 二连肖)
+//   replaceAll(三连(?!肖|尾) -> 三连肖)
+//   replaceAll(四连(?!肖|尾) -> 四连肖)
+//   replaceAll(五连(?!肖|尾) -> 五连肖)
+//   replaceAll(平特(\d)尾 -> 平$1尾)
+//   replaceAll((\d)尾平特 -> 平$1尾)
+//   replaceAll(([『【《〖])([^』】》〗]+)([』】》〗]) -> [$2])
+//   replaceAll(计\d+组 -> )
+//   replaceAll(计\d+元 -> )
+
+
+var RULES = { before: RULES_before, te: RULES_te, ping: RULES_ping };
+if (typeof module === 'object' && module.exports) module.exports = RULES;
+
+/* ================= 内联打包：parser/parser.js ================= */
+/* 记录文本解析器（把一段下注记录文本 → 结构化条目）
+ *
+ * 规则来源：yuantongji.apk 反编译（ZodiacUtils / ZodiacPingUtils / StackedImportPresenter）
+ *   - rules.js   ：自动提取的替换表（137/101 条容错替换）
+ *   - 本文件     ：流程 + 断句 + 金额/号码提取 + 玩法识别
+ *
+ * 流程（照抄原 App 的 parseClipText）：
+ *   原文 → ① 预处理 → ② 按 YPING 分「特/平」→ ③ 按 YTJ 分条
+ *        → ④ 每条：替换链规范化 → 断句 → 取数字/金额 → 识别玩法 → 结构化
+ *
+ * 与工具的关系：只做“读懂文本”，不做赔率/结算。
+ */
+
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory(require('./rules.js'));
+  } else {
+    root.RecordParser = factory(root.RULES);
+  }
+})(typeof self !== 'undefined' ? self : this, function (RULES) {
+
+  /* ---------------- ① 替换链 ---------------- */
+
+  function applyLiteral(s, pairs) {
+    // Java 的 String.replace = 字面量全部替换 → 用 split/join 最贴合（不受正则元字符影响）
+    for (var i = 0; i < pairs.length; i++) {
+      var from = pairs[i][0], to = pairs[i][1];
+      if (from === '') continue;
+      s = s.split(from).join(to);
+    }
+    return s;
+  }
+
+  var REGEX_RULES = {
+    // 从反编译里看到、但属于正则型的（手写；顺序与原代码一致）
+    before: [
+      [/共\d+个号/g, '']
+    ],
+    te: [],
+    ping: [
+      [/二连(?!肖|尾)/g, '二连肖'],
+      [/两连(?!肖|尾)/g, '二连肖'],
+      [/三连(?!肖|尾)/g, '三连肖'],
+      [/四连(?!肖|尾)/g, '四连肖'],
+      [/五连(?!肖|尾)/g, '五连肖'],
+      [/平特(\d)尾/g, '平$1尾'],
+      [/(\d)尾平特/g, '平$1尾'],
+      [/共\d+个/g, ''],
+      [/共\d+元/g, '']
+    ]
+  };
+
+  function applyRegex(s, rules) {
+    for (var i = 0; i < rules.length; i++) s = s.replace(rules[i][0], rules[i][1]);
+    return s;
+  }
+
+  // 通用归一化：原版只在「特」段的替换链里做（看反编译，replacePingSpecialStr 里没有 o→0），
+  // 这里提到最前面做一次，让「平」段也享受同样的容错。全部是字符级、幂等替换。
+  var COMMON_BEFORE = [
+    ['lo', '10'], ['I0', '10'], ['i0', '10'], ['l0', '10'], ['O', '0'], ['o', '0'],
+    ['块', '元'], ['快', '元'], ['蚊', '元'], ['文', '元'], ['克', '元'], ['¥', '元'], ['￥', '元'],
+    ['圆', '元'], ['园', '元'], ['井', '元'], ['斤', '元'], ['闷', '元'], ['元元', '元'],
+    ['，', ','], ['。', '.']
+  ];
+
+  function normalizeBefore(s) {
+    s = applyLiteral(s, COMMON_BEFORE);
+    s = applyLiteral(s, RULES.before);
+    return applyRegex(s, REGEX_RULES.before);
+  }
+
+  function normalize(s, kind) {
+    s = s.trim();
+    s = applyLiteral(s, kind === 'ping' ? RULES.ping : RULES.te);
+    s = applyRegex(s, kind === 'ping' ? REGEX_RULES.ping : REGEX_RULES.te);
+    return s;
+  }
+
+  /* ---------------- ② 中文数字 → 阿拉伯数字 ---------------- */
+
+  var CN_DIGIT = { '零': 0, '〇': 0, '一': 1, '壹': 1, '二': 2, '两': 2, '贰': 2, '三': 3, '叁': 3,
+    '四': 4, '肆': 4, '五': 5, '伍': 5, '六': 6, '陆': 6, '七': 7, '柒': 7, '八': 8, '捌': 8,
+    '九': 9, '玖': 9 };
+  var CN_UNIT = { '十': 10, '拾': 10, '百': 100, '千': 1000, '万': 10000 };
+
+  function cnToInt(str) {
+    var total = 0, section = 0, number = 0, ok = false;
+    for (var i = 0; i < str.length; i++) {
+      var ch = str[i];
+      if (ch in CN_DIGIT) { number = CN_DIGIT[ch]; ok = true; }
+      else if (ch in CN_UNIT) {
+        var unit = CN_UNIT[ch];
+        ok = true;
+        if (unit >= 10000) { section = (section + number) * unit; total += section; section = 0; }
+        else if (unit === 10 && number === 0 && i === 0) { number = 1; section += number * unit; }
+        else { section += (number || 1) * unit; }
+        number = 0;
+      } else return null;   // 含非数字字符 → 放弃
+    }
+    return ok ? total + section + number : null;
+  }
+
+  // 把文本里的中文数字串换成阿拉伯数字（比原 App 更通用：原版只处理第一个）
+  function replaceChineseNum(text) {
+    return text.replace(/[零〇一壹二两贰三叁四肆五伍六陆七柒八捌九玖十拾百千万]+/g, function (m) {
+      var v = cnToInt(m);
+      return v === null ? m : String(v);
+    });
+  }
+
+  /* ---------------- ③ 数字 / 金额提取 ---------------- */
+
+  // 对应 getNumsByStr：按“非数字”切开，留下的就是数字串
+  function getNums(s) {
+    return String(s).trim().split(/[^0-9]+/).filter(function (x) { return x !== ''; });
+  }
+
+  // 对应 getBetMoney(String)：只有一个数字 → 就是金额；多个 → 取最后一个
+  function getAmount(nums) {
+    if (!nums.length) return 0;
+    return Number(nums[nums.length - 1]) || 0;
+  }
+
+  /* ---------------- ④ 断句（对应 getContentArray / getPingContentArray） ---------------- */
+
+  function splitCells(s, kind) {
+    if (!s) return [];
+    // ① 有“元”：在每个“元”之后断开（平段有个特例，见下）
+    if (s.indexOf('元') !== -1) {
+      var byYuan = s.split(/(?<=元)/);
+      for (var i = 0; i < byYuan.length; i++) byYuan[i] = byYuan[i].trim();
+      var cleaned = byYuan.filter(Boolean);
+      if (kind === 'ping' && cleaned.length === 2 &&
+          /三中三|二中二|三中二/.test(cleaned[0]) && getNums(cleaned[0]).length === 1) {
+        return [s];                        // 特例：三中三/二中二 且只有一个数字 → 整条不切
+      }
+      return cleaned;
+    }
+    // ② 有换行
+    if (s.indexOf('\n') !== -1) return s.split('\n').map(trim).filter(Boolean);
+    // ③ 有逗号
+    if (/[，,]/.test(s)) return s.split(/[，,]/).map(trim).filter(Boolean);
+    return [s];
+  }
+  function trim(x) { return String(x).trim(); }
+
+  /* ---------------- ⑤ 玩法识别 ---------------- */
+  // 顺序重要：长词在前，避免“三中三”被“三”吃掉
+  var PLAYS = [
+    // 平段
+    { re: /三中三/, name: '三中三' },
+    { re: /三中二/, name: '三中二' },
+    { re: /二中二/, name: '二中二' },
+    { re: /五连肖|五肖/, name: '五连肖' },
+    { re: /四连肖|四肖/, name: '四连肖' },
+    { re: /三连肖|三肖/, name: '三连肖' },
+    { re: /二连肖|二肖/, name: '二连肖' },
+    { re: /连肖/, name: '连肖' },
+    { re: /连尾/, name: '连尾' },
+    { re: /[五五六六七七八八九九]不中|不中/, name: '不中' },
+    { re: /平特/, name: '平特' },
+    { re: /平码|平马/, name: '平码' },
+    { re: /三中/, name: '三中' },
+    // 特段
+    { re: /特肖/, name: '特肖' },
+    { re: /合数|合双|合单/, name: '合数' },
+    { re: /反子/, name: '反子' },
+    { re: /金|木|水|火|土/, name: '五行' },
+    { re: /尾/, name: '尾数' },
+    { re: /岁/, name: '岁数' },
+    { re: /头/, name: '头数' },
+    { re: /波|红波|蓝波|绿波/, name: '波色' },
+    // 通用
+    { re: /肖/, name: '生肖' },
+    { re: /[鼠牛虎兔龙蛇马羊猴鸡狗猪]/, name: '生肖' }
+  ];
+
+  var ZODIAC_CHARS = '鼠牛虎兔龙蛇马羊猴鸡狗猪';
+
+  /* 号码 → 生肖
+   * 照原 App：ZodiacUtils.getNameByNum(n) = CHINESE_ZODIAC[(n - 1) % 12]
+   * CHINESE_ZODIAC 的值从 DEX 字符串池取到：鼠牛虎兔龙蛇马羊猴鸡狗猪（12 个各一次）
+   * 即：01=鼠 02=牛 … 12=猪 13=鼠(循环) … 49=鼠
+   */
+  function numberToZodiac(n) {
+    if (!(n >= 1)) return '';
+    return ZODIAC_CHARS[(n - 1) % 12];
+  }
+
+  function detectPlay(cell) {
+    for (var i = 0; i < PLAYS.length; i++) {
+      if (PLAYS[i].re.test(cell)) return PLAYS[i].name;
+    }
+    if (/[0-9]/.test(cell)) return '号码';
+    return '未识别';
+  }
+
+  // 取出条目里的生肖字（去重、保序）
+  function getZodiacs(cell) {
+    var out = [];
+    for (var i = 0; i < cell.length; i++) {
+      if (ZODIAC_CHARS.indexOf(cell[i]) !== -1 && out.indexOf(cell[i]) === -1) out.push(cell[i]);
+    }
+    return out;
+  }
+
+  /* ---------------- ⑥ 单条解析 ---------------- */
+
+  // 特段里这些属于“平”，要跳过（照抄原 App 的过滤）
+  var PING_WORDS = ['平', '平特', '三中三', '二中二', '连肖', '三连', '四连'];
+
+  function isPingWord(cell) {
+    for (var i = 0; i < PING_WORDS.length; i++) {
+      if (cell.indexOf(PING_WORDS[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  function parseCell(cell, kind) {
+    var norm = cell.trim();
+    if (!norm) return null;
+    // ⚠️ 顺序很重要：先用「未转数字」的文本识别玩法
+    //    （否则「二连肖」会被中文数字转换破坏成「2连肖」而认不出玩法）
+    var play = detectPlay(norm);
+    var withNum = replaceChineseNum(norm);
+    var nums = getNums(withNum);
+    var amount = getAmount(nums);
+    return {
+      board: '',                       // 由上层填
+      kind: kind,                      // 'te' | 'ping'
+      play: play,
+      content: withNum,
+      numbers: nums.map(Number),
+      zodiacs: getZodiacs(withNum),
+      amount: amount
+    };
+  }
+
+  /* ---------------- ⑧ 展开成「每个号码买了多少钱」 ----------------
+   * 照抄原 App 的 ZodiacUtils.getNumberZodiacList(itemStr, money)：
+   *   数字串里 **除最后一个** 都是号码，最后一个是金额。
+   *   例：「07.19.29…20各30」→ 20 个号码，每个 30 元。
+   */
+  function pad2(n) {
+    var s = String(n);
+    return s.length < 2 ? '0' + s : s;
+  }
+
+  function expandBets(item, maxNumber) {
+    maxNumber = maxNumber || 49;               // 六合彩号码范围 01–49
+    var nums = item.numbers || [];
+    var money = item.amount;
+    var bets = [];
+
+    if (item.play === '号码' && nums.length > 1) {
+      for (var i = 0; i < nums.length - 1; i++) {
+        if (nums[i] >= 1 && nums[i] <= maxNumber) {
+          bets.push({
+            label: pad2(nums[i]),
+            number: nums[i],
+            zodiac: numberToZodiac(nums[i]),
+            money: money
+          });
+        }
+      }
+      if (bets.length) return bets;
+    }
+    if (item.zodiacs && item.zodiacs.length) {
+      for (var j = 0; j < item.zodiacs.length; j++) {
+        bets.push({ label: item.zodiacs[j], number: null, zodiac: item.zodiacs[j], money: money });
+      }
+      return bets;
+    }
+    bets.push({ label: item.play, number: null, zodiac: '', money: money });
+    return bets;
+  }
+
+  /* ---------------- ⑨ 顶层：解析整段文本 ---------------- */
+
+  var APP_MARKERS = /YTE|YPING|YTJ|T_A|T_G/;
+
+  function parseMessage(rawText) {
+    var text = String(rawText || '').replace(/\r/g, '');
+    // ① 去掉自家导出的加粗表头（原版：clipText.replace("**商户一键导出**\n","")）
+    //    必须删：表头里的“一”会被中文数字转换当成金额 1
+    text = text.replace(/\*\*[^*\n]{1,30}\*\*/g, '');
+    text = normalizeBefore(text);
+    // 没有 App 的导出标记 → 走宽松模式（用户直接粘贴的普通文本）
+    if (!APP_MARKERS.test(text)) return parseLoose(text);
+
+    // 有 YTJ/T_A/T_G，但没有「特/平」分段标记（YPING/YTE）→ 无法确定分段，逐条判断
+    if (text.indexOf('YPING') === -1 && text.indexOf('YTE') === -1) {
+      return parseLoose(text, 'YTJ');
+    }
+
+    var result = { te: [], ping: [], skipped: [], warnings: [], mode: 'strict' };
+
+    // ① 按 YPING 分「特 / 平」
+    var clips = text.split('YPING');
+    var teText = '', pingText = '';
+    if (clips.length === 1) {
+      if (clips[0].indexOf('YTE') !== -1) teText = clips[0].replace('YTE', '');
+      else pingText = clips[0];
+    } else {
+      teText = clips[0].replace('YTE', '');
+      pingText = clips[1];
+    }
+
+    // ② 按 YTJ 分条
+    function items(str, kind) {
+      if (!str || !str.trim()) return [];
+      var arr = str.split('YTJ');
+      var out = [];
+      for (var i = 0; i < arr.length; i++) {
+        var one = arr[i];
+        if (!one.trim()) continue;
+        // 盘口：T_A=澳门，T_G=香港
+        var board = one.indexOf('T_A') !== -1 ? '澳门' : (one.indexOf('T_G') !== -1 ? '香港' : '');
+        var body = one.replace('T_A', '').replace('T_G', '');
+        // 特段：只取“计”之前（后面是统计说明）
+        if (kind === 'te' && body.indexOf('计') !== -1) body = body.split('计')[0];
+        var cells = splitCells(normalize(body, kind), kind);
+        for (var j = 0; j < cells.length; j++) {
+          if (kind === 'te' && isPingWord(cells[j])) {
+            // 特段里出现「平」类（平特/连肖/三中三…）——原 App 也是跳过；但记下来别静默丢
+            result.skipped.push({ kind: kind, board: board, content: cells[j], reason: '特段里的平类条目' });
+            continue;
+          }
+          var item = parseCell(cells[j], kind);
+          if (!item) continue;
+          if (!item.amount && !item.numbers.length) continue;     // 无数字的说明性文字，丢掉
+          item.board = board;
+          (kind === 'te' ? result.te : result.ping).push(item);
+        }
+      }
+      return out;
+    }
+
+    items(teText, 'te');
+    items(pingText, 'ping');
+
+    if (!result.te.length && !result.ping.length) {
+      result.warnings.push('没解析出任何条目：这段文本里没有 YTJ/YPING 分隔符，或格式不同');
+    }
+    return result;
+  }
+
+  /* ---------------- ⑧ 宽松模式：没有 App 标记的普通文本 ----------------
+   * 原 App 只认自己导出的格式（YTE/YPING/YTJ/T_A/T_G）；用户直接粘贴的文本往往没有这些标记，
+   * 全当「平」段处理会解析得很难看。这里补一条通路：按行/分号切条，逐条判断是特类还是平类。
+   */
+  var PING_HINT = /平特|连肖|连尾|三中三|三中二|二中二|不中|平码|平马/;
+
+  function parseLoose(text, sep) {
+    var result = { te: [], ping: [], skipped: [], warnings: [], mode: 'loose' };
+    var boardAll = /T_A|澳门|澳盘|澳/.test(text) ? '澳门' : (/T_G|香港|港/.test(text) ? '香港' : '');
+    var lines = (sep ? text.split(sep) : text.split(/[\n;；]/)).map(trim).filter(Boolean);
+
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i];
+      var board = boardAll;
+      if (/T_A|^澳门|^澳[:：\s]/.test(raw)) board = '澳门';
+      else if (/T_G|^香港|^港[:：\s]/.test(raw)) board = '香港';
+      var line = raw.replace(/T_A|T_G/g, '').replace(/^(澳门|香港|澳|港)\s*[:：]?\s*/, '');
+
+      var kind = PING_HINT.test(line) ? 'ping' : 'te';
+      var body = line;
+      if (kind === 'te' && body.indexOf('计') !== -1) body = body.split('计')[0];
+
+      var cells = splitCells(normalize(body, kind), kind);
+      for (var j = 0; j < cells.length; j++) {
+        var item = parseCell(cells[j], kind);
+        if (!item || (!item.amount && !item.numbers.length)) continue;
+        item.board = board;
+        (kind === 'te' ? result.te : result.ping).push(item);
+      }
+    }
+    if (!result.te.length && !result.ping.length) {
+      result.warnings.push('没解析出任何条目：没识别到“生肖/号码 + 金额”这类内容');
+    }
+    return result;
+  }
+
+  /* ---------------- 导出 ---------------- */
+
+  return {
+    parseMessage: parseMessage,
+    expandBets: expandBets,
+    numberToZodiac: numberToZodiac,
+    // 以下导出供测试与调试
+    _internal: {
+      normalizeBefore: normalizeBefore,
+      normalize: normalize,
+      replaceChineseNum: replaceChineseNum,
+      cnToInt: cnToInt,
+      splitCells: splitCells,
+      getNums: getNums,
+      getAmount: getAmount,
+      detectPlay: detectPlay,
+      getZodiacs: getZodiacs,
+      numberToZodiac: numberToZodiac,
+      pad2: pad2
+    }
+  };
+});
+
+</script>
+<script>
+/* =====================================================================
+   数据模型（照原 App 的“叠加单”思路）：
+     batches = [ { id, ts, text, items: [ {board,kind,play,content,bets:[{label,number,money}]} ] } ]
+
+   · 每输入一段 = 加一个 batch（永不覆盖）
+   · “累计” = 把所有 batch 里的 bets 按 label 加总
+   · 删掉某个 batch，累计自动重算
+   ===================================================================== */
+
+const KEY = 'parse-batches-v1';
+const $ = function (id) { return document.getElementById(id); };
+
+/* ---------- 先探测：这台设备能不能存数据 ----------
+ * iOS 用「本地文件」（file://）打开时，浏览器会禁止 localStorage，
+ * 数据关掉页面就没了。检测到这种情况就：① 明确告知 ② 降级到内存，至少本次会话能用。
+ */
+const STORAGE_OK = (function () {
+  try {
+    localStorage.setItem('__probe__', '1');
+    localStorage.removeItem('__probe__');
+    return true;
+  } catch (e) { return false; }
+})();
+
+const memStore = {};
+const store = STORAGE_OK
+  ? {
+      get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+      set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+    }
+  : {
+      get: function (k) { return k in memStore ? memStore[k] : null; },
+      set: function (k, v) { memStore[k] = String(v); }
+    };
+
+let batches = [];
+let hitLabels = {};       // 刚刚累加到的号码（高亮一下）
+let filterKind = 'all';
+let sortMode = 'number';  // 'number' 按号码 | 'money' 按金额从大到小
+
+/* ---------------- 存取 ---------------- */
+function load() {
+  try { batches = JSON.parse(store.get(KEY)) || []; }
+  catch (e) { batches = []; }
+}
+function save() {
+  store.set(KEY, JSON.stringify(batches));
+}
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+/* ---------------- 计算：累计 ---------------- */
+function aggregate() {
+  const map = {};      // label -> {label, number, money, count, boards:{}, kinds:{}}
+  let total = 0, cells = 0;
+
+  batches.forEach(function (b) {
+    b.items.forEach(function (it) {
+      const bets = RecordParser.expandBets(it);
+      bets.forEach(function (bet) {
+        const k = bet.label;
+        if (!map[k]) map[k] = { label: k, number: bet.number, money: 0, count: 0, boards: {}, kinds: {} };
+        // 段筛选：只看特 / 只看平
+        const isTe = it.kind === 'te';
+        map[k].money += bet.money;
+        map[k].count += 1;
+        if (bet.zodiac) map[k].zodiac = bet.zodiac;
+        if (!map[k].number && bet.number) map[k].number = bet.number;
+        cells++;
+        total += bet.money;
+        if (it.board) map[k].boards[it.board] = 1;
+        map[k].kinds[isTe ? 'te' : 'ping'] = 1;
+        map[k]['_te'] = (map[k]['_te'] || 0) + (isTe ? bet.money : 0);
+        map[k]['_ping'] = (map[k]['_ping'] || 0) + (isTe ? 0 : bet.money);
+      });
+    });
+  });
+
+  return { map: map, total: total, cells: cells };
+}
+
+function rowsForView() {
+  const agg = aggregate();
+  const rows = Object.keys(agg.map).map(function (k) { return agg.map[k]; });
+
+  const filtered = rows.filter(function (r) {
+    if (filterKind === 'all') return true;
+    return filterKind === 'te' ? r._te > 0 : r._ping > 0;
+  });
+
+  // 排序：按号码（默认）或按金额从大到小
+  if (sortMode === 'money') {
+    filtered.sort(function (a, b) {
+      const va = filterKind === 'te' ? a._te : filterKind === 'ping' ? a._ping : a.money;
+      const vb = filterKind === 'te' ? b._te : filterKind === 'ping' ? b._ping : b.money;
+      if (vb !== va) return vb - va;
+      return a.label < b.label ? -1 : 1;
+    });
+  } else {
+    filtered.sort(function (a, b) {
+      const na = parseInt(a.label, 10), nb = parseInt(b.label, 10);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return a.label < b.label ? -1 : 1;
+    });
+  }
+
+  // 视图内的合计
+  let total = 0, count = 0;
+  filtered.forEach(function (r) {
+    total += (filterKind === 'te' ? r._te : filterKind === 'ping' ? r._ping : r.money);
+    count += r.count;
+  });
+  return { rows: filtered, total: total, cells: count };
+}
+
+/* ---------------- 渲染 ---------------- */
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  });
+}
+function money(n) { return String(Math.round(n * 100) / 100); }
+
+function render() {
+  const view = rowsForView();
+
+  /* 汇总条 */
+  $('stats').innerHTML = '<div class="stats">' +
+    '<div><div class="k">总投入</div><div class="v big">' + money(view.total) + '</div></div>' +
+    '<div><div class="k">号码数</div><div class="v">' + view.rows.length + '</div></div>' +
+    '<div><div class="k">笔数</div><div class="v">' + batches.length + '</div></div>' +
+    '<div><div class="k">条目格</div><div class="v">' + view.cells + '</div></div>' +
+    '</div>';
+
+  /* 累计：号码格（号码 / 生肖 / 累计金额） */
+  if (!view.rows.length) {
+    $('cum').innerHTML = '<div class="empty">还没有数据 —— 上面输入一句话试试</div>';
+  } else {
+    let html = '<div class="grid">';
+    view.rows.forEach(function (r) {
+      const show = filterKind === 'te' ? r._te : filterKind === 'ping' ? r._ping : r.money;
+      const boards = Object.keys(r.boards);
+      const z = r.zodiac || (r.number ? RecordParser.numberToZodiac(r.number) : '');
+      html += '<div class="cell' + (hitLabels[r.label] ? ' hit' : '') + '" title="' +
+              esc((boards.join('/') || '未标盘口') + ' · 出现 ' + r.count + ' 次') + '">' +
+        '<b>' + esc(r.label) + '</b>' +
+        '<s>' + esc(z) + '</s>' +
+        '<i>' + money(show) + (r.count > 1 ? ' ×' + r.count : '') + '</i>' +
+        '</div>';
+    });
+    html += '</div>';
+    html += '<div class="note">每个格子 = 号码 / 生肖 / 累计金额；×N 表示这个号码被输入了 N 次。长按格子可看盘口。</div>';
+    $('cum').innerHTML = html;
+  }
+
+  /* 历史批次 */
+  $('batchCount').textContent = batches.length;
+  if (!batches.length) {
+    $('batches').innerHTML = '<div class="empty">还没有输入记录</div>';
+  } else {
+    let bh = '';
+    batches.slice().reverse().forEach(function (b) {
+      const sum = b.items.reduce(function (s, it) {
+        return s + RecordParser.expandBets(it).reduce(function (x, y) { return x + y.money; }, 0);
+      }, 0);
+      bh += '<div class="batch">' +
+        '<span class="t">' + esc(b.time) + '</span>' +
+        '<span class="txt">' + esc(b.text) + '</span>' +
+        '<span class="amt">' + money(sum) + '</span>' +
+        '<button class="del" data-del="' + b.id + '" title="删除这笔">×</button>' +
+        '</div>';
+    });
+    $('batches').innerHTML = bh;
+  }
+}
+
+/* ---------------- 动作 ---------------- */
+function addFromText(text) {
+  const res = RecordParser.parseMessage(text);
+  const items = res.te.concat(res.ping);
+  if (!items.length) {
+    $('msg').textContent = '没解析出内容，检查一下格式（金额要写在最后）。输入框给你留着。';
+    return false;
+  }
+
+  const now = new Date();
+  batches.push({
+    id: uid(),
+    time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
+    text: text.trim().replace(/\s+/g, ' ').slice(0, 120),
+    items: items
+  });
+
+  // 高亮这次动到的号码
+  hitLabels = {};
+  items.forEach(function (it) {
+    RecordParser.expandBets(it).forEach(function (b) { hitLabels[b.label] = 1; });
+  });
+
+  save();
+  render();
+
+  $('input').value = '';        // ★ 清空，等待下一次输入
+  $('input').focus();
+  const sum = items.reduce(function (s, it) {
+    return s + RecordParser.expandBets(it).reduce(function (x, y) { return x + y.money; }, 0);
+  }, 0);
+  $('msg').textContent = '已累加：' + items.length + ' 条，' + money(sum) + ' 元';
+  setTimeout(function () { hitLabels = {}; render(); }, 2500);
+  return true;
+}
+
+$('btnAdd').addEventListener('click', function () {
+  const text = $('input').value;
+  if (!text.trim()) { $('msg').textContent = '先粘贴或输入内容'; return; }
+  addFromText(text);
+});
+
+// 回车（Ctrl+Enter 也走同一逻辑）直接累加；Shift+Enter 换行
+$('input').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    $('btnAdd').click();
+  }
+});
+
+$('btnClip').addEventListener('click', function () {
+  if (!navigator.clipboard || !navigator.clipboard.readText) {
+    $('msg').textContent = '这个浏览器不支持读剪贴板，请手动粘贴';
+    return;
+  }
+  navigator.clipboard.readText().then(function (t) {
+    $('input').value = t;
+    $('msg').textContent = '已读入剪贴板，按回车累加';
+  }).catch(function () {
+    $('msg').textContent = '读剪贴板被拒绝，请手动粘贴';
+  });
+});
+
+$('btnSample').addEventListener('click', function () {
+  $('input').value = '07.19.29.01.13.23.35.45.05.11.17.21.33.43.42.14.26.36.48.20各30澳门特';
+});
+
+$('btnUndo').addEventListener('click', function () {
+  if (!batches.length) { $('msg').textContent = '没有可撤销的'; return; }
+  if (!confirm('删掉最后一条输入？累计会重新计算。')) return;
+  batches.pop();
+  save(); render();
+  $('msg').textContent = '已撤销 1 条';
+});
+
+$('btnClearAll').addEventListener('click', function () {
+  if (!batches.length) { $('msg').textContent = '本来就是空的'; return; }
+  if (!confirm('清空全部 ' + batches.length + ' 条输入？累计会归零，无法恢复。')) return;
+  if (!confirm('再确认一次：真的要全部清空？')) return;
+  batches = [];
+  save(); render();
+  $('msg').textContent = '已清空';
+});
+
+$('batches').addEventListener('click', function (e) {
+  const id = e.target.getAttribute('data-del');
+  if (!id) return;
+  batches = batches.filter(function (b) { return b.id !== id; });
+  save(); render();
+  $('msg').textContent = '已删除该笔，累计已重算';
+});
+
+/* ---------- 备份 / 恢复 ---------- */
+$('btnBackup').addEventListener('click', function () {
+  if (!batches.length) { $('msg').textContent = '还没有数据可备份'; return; }
+  $('dataBox').value = JSON.stringify({ v: 1, batches: batches });
+  $('msg').textContent = '已生成备份（' + batches.length + ' 条）—— 全选复制，存到微信收藏或备忘录';
+  if ($('dataBox').select) $('dataBox').select();
+});
+
+$('btnRestore').addEventListener('click', function () {
+  const txt = $('dataBox').value.trim();
+  if (!txt) { $('msg').textContent = '先把备份文本粘到下面的框里'; return; }
+  let obj;
+  try { obj = JSON.parse(txt); }
+  catch (e) { $('msg').textContent = '这段文本不是有效备份（要原样粘贴，别改动）'; return; }
+  const list = Array.isArray(obj) ? obj : obj.batches;
+  if (!Array.isArray(list)) { $('msg').textContent = '备份格式不对'; return; }
+  if (!confirm('恢复会用备份覆盖当前数据（当前 ' + batches.length + ' 条），继续？')) return;
+  batches = list;
+  save(); render();
+  $('msg').textContent = '已恢复 ' + batches.length + ' 条';
+});
+
+$('filterKind').addEventListener('change', function (e) {
+  filterKind = e.target.value;
+  render();
+});
+$('sortMode').addEventListener('change', function (e) {
+  sortMode = e.target.value;
+  render();
+});
+
+/* ---------------- 启动 ---------------- */
+load();
+render();
+
+/* 存不住数据时，直接告诉用户为什么、怎么办 */
+(function warnIfNoStorage() {
+  const box = $('storageWarn');
+  if (!box || STORAGE_OK) return;
+  box.style.display = 'block';
+  box.innerHTML =
+    '<b>⚠️ 这台设备存不住数据</b><br>' +
+    '现在的打开方式是「本地文件」—— iOS 下浏览器禁止本地文件保存数据（安卓没这个限制）。' +
+    '在这个模式下，数据关掉页面就没了。<br><br>' +
+    '<b>两个办法：</b><br>' +
+    '① <b>改用网址打开</b>（形如 <code>http://…</code>）—— 数据才能长期保存，也可加到主屏幕当 App 用；<br>' +
+    '② 继续用也行，但<b>每次用完点下面的「生成备份文本」存起来</b>，下次粘回来就能恢复。';
+})();
+
+/* 号码 ↔ 生肖 对照表（1–49，供核对） */
+(function renderZodiacMap() {
+  let h = '<div class="grid">';
+  for (let n = 1; n <= 49; n++) {
+    h += '<div class="cell"><b>' + RecordParser._internal.pad2(n) + '</b><s>' + RecordParser.numberToZodiac(n) + '</s></div>';
+  }
+  h += '</div>';
+  const box = $('zodiacMap');
+  if (box) box.innerHTML = h;
+})();
+</script>
+</body>
+</html>
