@@ -163,9 +163,11 @@
     <summary>号码 ↔ 生肖 对照表（核对一下对不对）</summary>
     <div id="zodiacMap" style="margin-top:8px"></div>
     <div class="note">
-      这份表来自原 App 里硬编码的 CHINESE_ZODIAC，公式：<code>生肖 = 表[(号码-1) % 12]</code>，
-      即 01=鼠、07=马、12=猪、13=鼠… 循环。<br>
-      如果和你那边的对应不一样（六合彩每年会变），告诉我正确的（比如“今年 01 是马”），改一行就能调。
+            <b>2026 丙午马年</b>：<code>01=马、02=蛇、03=龙…（从当年生肖起、按十二生肖<b>倒序</b>排）</code><br>
+      这张是从原 App 里挖出来的真表（<code>CHINESE_ZODIAC</code>），每年农历新年后要改一个字，
+      明年（2027 羊年）就是 <code>羊马蛇龙兔虎牛鼠猪狗鸡猴</code>。<br>
+      只有<b>当年生肖</b>占 5 个号码（01/13/25/37/49），其余生肖各 4 个。<br>
+      对不上就告诉我"今年 01 是 X"，改一行就能调。
     </div>
   </details>
 </div>
@@ -628,16 +630,48 @@ if (typeof module === 'object' && module.exports) module.exports = RULES;
     { re: /[鼠牛虎兔龙蛇马羊猴鸡狗猪]/, name: '生肖' }
   ];
 
-  var ZODIAC_CHARS = '鼠牛虎兔龙蛇马羊猴鸡狗猪';
-
-  /* 号码 → 生肖
-   * 照原 App：ZodiacUtils.getNameByNum(n) = CHINESE_ZODIAC[(n - 1) % 12]
-   * CHINESE_ZODIAC 的值从 DEX 字符串池取到：鼠牛虎兔龙蛇马羊猴鸡狗猪（12 个各一次）
-   * 即：01=鼠 02=牛 … 12=猪 13=鼠(循环) … 49=鼠
+  /* ===== 生肖表 =====
+   * 照原 App 的真表（jadx 反编译 ZodiacUtils 得到）：
+   *   CHINESE_ZODIAC = {"马","蛇","龙","兔","虎","牛","鼠","猪","狗","鸡","猴","羊"}
+   * 规律 = 从「当年生肖」开始，按十二生肖顺序**倒序**排：
+   *   2026 = 丙午马年 → 01=马、02=蛇、03=龙…12=羊
+   *
+   * ⚠️ 每年农历新年后只需改下面 ZODIAC_YEAR_ANIMAL 一个字。
+   *   明年（2027 丁未羊年）→ 改成 '羊'，表会自动变成 羊马蛇龙兔虎牛鼠猪狗鸡猴
    */
+  var ZODIAC_ORDER = '鼠牛虎兔龙蛇马羊猴鸡狗猪';
+  var ZODIAC_YEAR_ANIMAL = '马';   // ← 当年生肖（2026 马年）
+
+  var ZODIAC_CHARS = (function () {
+    var i = ZODIAC_ORDER.indexOf(ZODIAC_YEAR_ANIMAL);
+    if (i < 0) return ZODIAC_ORDER;
+    var out = '';
+    for (var k = 0; k < 12; k++) out += ZODIAC_ORDER[(i - k + 144) % 12];
+    return out;
+  })();
+
+  /* 号码 → 生肖（照原 App：getNameByNum(n) = CHINESE_ZODIAC[(n-1) % 12]） */
   function numberToZodiac(n) {
     if (!(n >= 1)) return '';
     return ZODIAC_CHARS[(n - 1) % 12];
+  }
+
+  /* 生肖 → 号码（照原 App：getBeansByZodiacName(name)）
+   *   i==0（当年生肖）→ 5 个号码：i+1, i+13, i+25, i+37, i+49
+   *   其余生肖       → 4 个号码：i+1, i+13, i+25, i+37
+   *   例（2026）：马 → 01/13/25/37/49；鼠 → 07/19/31/43
+   */
+  function zodiacToNumbers(name, maxNumber) {
+    maxNumber = maxNumber || 49;
+    var idx = ZODIAC_CHARS.indexOf(name);
+    if (idx < 0) return [];
+    var count = (idx === 0) ? 5 : 4;
+    var out = [];
+    for (var j = 0; j < count; j++) {
+      var n = idx + 1 + j * 12;
+      if (n <= maxNumber) out.push(n);
+    }
+    return out;
   }
 
   function detectPlay(cell) {
@@ -719,8 +753,45 @@ if (typeof module === 'object' && module.exports) module.exports = RULES;
       if (bets.length) return bets;
     }
     if (item.zodiacs && item.zodiacs.length) {
+      /* 支持一条里写多个生肖不同金额（原 App 只支持统一金额，这里增强）
+       *   「鼠30马20」→ 鼠 30、马 20
+       *   「三肖鼠马虎各30」→ 三个生肖都 30
+       */
+      var pairs = [];
+      if (item.zodiacs.length > 1 && item.content) {
+        var zre = new RegExp('([' + ZODIAC_CHARS + '])\\s*(\\d+(?:\\.\\d+)?)', 'g');
+        var mm;
+        while ((mm = zre.exec(item.content)) !== null) {
+          pairs.push({ zodiac: mm[1], money: Number(mm[2]) });
+        }
+        if (pairs.length !== item.zodiacs.length) pairs = [];
+      }
       for (var j = 0; j < item.zodiacs.length; j++) {
-        bets.push({ label: item.zodiacs[j], number: null, zodiac: item.zodiacs[j], money: money });
+        var z = item.zodiacs[j];
+        var zMoney = money;
+        if (pairs.length) {
+          for (var p = 0; p < pairs.length; p++) {
+            if (pairs[p].zodiac === z) { zMoney = pairs[p].money; break; }
+          }
+        }
+        var zNums = zodiacToNumbers(z, maxNumber);
+        if (zNums.length) {
+          /* 生肖投注 = 该生肖每个号码各买这么多
+           * 照原 App 的做法：replaceZodiacStrToNumStr 先把「鼠」换成「07.19.31.43」，再走号码统计
+           * 例：买鼠 30 → 07/19/31/43 各 30 元，合计 120
+           */
+          for (var k = 0; k < zNums.length; k++) {
+            bets.push({
+              label: pad2(zNums[k]),
+              number: zNums[k],
+              zodiac: z,
+              money: zMoney,
+              fromZodiac: z
+            });
+          }
+        } else {
+          bets.push({ label: z, number: null, zodiac: z, money: zMoney });
+        }
       }
       return bets;
     }
@@ -840,6 +911,9 @@ if (typeof module === 'object' && module.exports) module.exports = RULES;
     parseMessage: parseMessage,
     expandBets: expandBets,
     numberToZodiac: numberToZodiac,
+    zodiacToNumbers: zodiacToNumbers,
+    ZODIAC_CHARS: ZODIAC_CHARS,
+    ZODIAC_YEAR_ANIMAL: ZODIAC_YEAR_ANIMAL,
     // 以下导出供测试与调试
     _internal: {
       normalizeBefore: normalizeBefore,
@@ -852,6 +926,8 @@ if (typeof module === 'object' && module.exports) module.exports = RULES;
       detectPlay: detectPlay,
       getZodiacs: getZodiacs,
       numberToZodiac: numberToZodiac,
+      zodiacToNumbers: zodiacToNumbers,
+      ZODIAC_CHARS: ZODIAC_CHARS,
       pad2: pad2
     }
   };
